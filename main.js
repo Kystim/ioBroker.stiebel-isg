@@ -182,9 +182,9 @@ function getHTML(sidePath) {
 	};
 
 	return new Promise(function (resolve, reject) {
-		adapter.log.debug("requesting " + sidePath);
+		adapter.log.info("requesting " + sidePath);
 		request(options, function (error, response, content) {
-			adapter.log.debug("requested " + sidePath);
+			adapter.log.info("requested " + sidePath);
 			if (!error && response.statusCode == 200) {
 				resolve(cheerio.load(content));
 			} else if (error) {
@@ -726,16 +726,16 @@ function main() {
 	updateIsg()
 		.then(() => queueCommand(
 			updateCommands,
-			adapter.config.isgCommandIntervall),
-		id => isgCommandIntervall = id
-		);
+			adapter.config.isgCommandIntervall,
+			id => isgCommandIntervall = id
+		));
 
 	updateCommands()
 		.then(() => queueCommand(
 			updateIsg,
-			adapter.config.isgIntervall),
-		id => isgIntervall = id
-		);
+			adapter.config.isgIntervall,
+			id => isgIntervall = id
+		));
 }
 
 function queueCommand(command, timeout, nextId) {
