@@ -720,12 +720,6 @@ function main() {
 		adapter.subscribeStates("ISGReboot")
 	);
 
-	adapter.log.silly("Testlog: silly");
-	adapter.log.debug("Testlog: debug");
-	adapter.log.info("Testlog: info");
-	adapter.log.warn("Testlog: warn");
-	adapter.log.error("Testlog: error");
-
 	host = adapter.config.isgAddress;
 	if(host.search(/http/i) == -1){
 		host = "http://" + host;
@@ -735,20 +729,19 @@ function main() {
 	updateIsg()
 		.then(() => queueCommand(
 			updateCommands,
-			adapter.config.isgCommandIntervall,
+			adapter.config.isgCommandIntervall *1000,
 			id => isgCommandIntervall = id
 		));
 
 	updateCommands()
 		.then(() => queueCommand(
 			updateIsg,
-			adapter.config.isgIntervall,
+			adapter.config.isgIntervall *1000,
 			id => isgIntervall = id
 		));
 }
 
 function queueCommand(command, timeout, nextId) {
-	timeout *= 1000;
 	const start = Date.now();
 
 	adapter.log.info("Queueing command for " + timeout + " ms");
