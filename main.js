@@ -74,8 +74,8 @@ function startAdapter(options) {
 		},
 		unload: function (callback) {
 			try {
-				if (isgIntervall) clearInterval(isgIntervall);
-				if (isgCommandIntervall) clearInterval(isgCommandIntervall);
+				if (isgIntervall) clearTimeout(isgIntervall);
+				if (isgCommandIntervall) clearTimeout(isgCommandIntervall);
 				adapter.log.info("cleaned everything up...");
 				callback();
 			} catch (e) {
@@ -182,7 +182,9 @@ function getHTML(sidePath) {
 	};
 
 	return new Promise(function (resolve, reject) {
+		adapter.log.debug("requesting " + sidePath);
 		request(options, function (error, response, content) {
+			adapter.log.debug("requested " + sidePath);
 			if (!error && response.statusCode == 200) {
 				resolve(cheerio.load(content));
 			} else if (error) {
@@ -721,33 +723,51 @@ function main() {
 	}
 	adapter.subscribeStates("*");
 
-	statusPaths.forEach(function(item){
-		getIsgStatus(item);
-	});
+	updateIsg()
+		.then(() => queueCommand(
+			updateCommands,
+			adapter.config.isgCommandIntervall),
+		id => isgCommandIntervall = id
+		);
 
-	valuePaths.forEach(function(item){
-		getIsgValues(item);
-	});
+	updateCommands()
+		.then(() => queueCommand(
+			updateIsg,
+			adapter.config.isgIntervall),
+		id => isgIntervall = id
+		);
+}
 
-	commandPaths.forEach(function(item){
-		getIsgCommands(item);
-	});
+function queueCommand(command, timeout, nextId) {
+	timeout *= 1000;
+	const start = Date.now();
 
-	isgIntervall = setInterval(function(){
-		valuePaths.forEach(function(item){
-			getIsgValues(item);
-		}), statusPaths.forEach(function(item){
-			getIsgStatus(item);
-		});
-	}, (adapter.config.isgIntervall * 1000));
+	const id = setTimeout(async function () {
+		await command();
 
+		let waitTime = timeout - (Date.now() - start);
+		if(waitTime < 1)
+			waitTime = 1;
 
+		queueCommand(command, waitTime, nextId);
+	}, timeout);
+	nextId(id);
+}
 
-	isgCommandIntervall = setInterval(function(){
-		commandPaths.forEach(function(item){
-			getIsgCommands(item);
-		});
-	}, (adapter.config.isgCommandIntervall * 1000));
+async function updateIsg(){
+	for (const item of statusPaths) {
+		await getIsgStatus(item);
+	}
+
+	for (const item of valuePaths) {
+		await getIsgValues(item);
+	}
+}
+
+async function updateCommands(){
+	for (const item of commandPaths) {
+		await getIsgCommands(item);
+	}
 }
 
 function rebootISG(){
