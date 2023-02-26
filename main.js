@@ -70,8 +70,8 @@ function startAdapter(options) {
         },
         unload: function (callback) {
             try {
-                if (isgIntervall) clearInterval(isgIntervall);
-                if (isgCommandIntervall) clearInterval(isgCommandIntervall);
+                if (isgIntervall) clearTimeout(isgIntervall);
+                if (isgCommandIntervall) clearTimeout(isgCommandIntervall);
                 adapter.log.info('cleaned everything up...');
                 callback();
             } catch (e) {
@@ -180,8 +180,16 @@ function getIsgStatus(sidePath) {
             'Connection': 'keep-alive'
         }
     };
-    
+
+    let resolvePromise, rejectPromise;
+    const promise = new Promise(function (resolve, reject) {
+        resolvePromise = resolve;
+        rejectPromise = reject;
+    });
+
+    adapter.log.debug("requesting " + sidePath);
     request(options, function (error, response, content) {
+        adapter.log.debug("requested " + sidePath);
         if (!error && response.statusCode == 200) {
             let $ = cheerio.load(content);
             
@@ -243,7 +251,11 @@ function getIsgStatus(sidePath) {
             adapter.log.error("statusCode: " + response.statusCode);
             adapter.log.error("statusText: " + response.statusText);
         }
+
+        resolvePromise();
     });
+
+    return promise;
 }
 
 function getIsgValues(sidePath) {
@@ -264,8 +276,17 @@ function getIsgValues(sidePath) {
             'Connection': 'keep-alive'
         }
     };
-    
+
+
+    let resolvePromise, rejectPromise;
+    const promise = new Promise(function (resolve, reject) {
+        resolvePromise = resolve;
+        rejectPromise = reject;
+    });
+
+    adapter.log.debug("requesting " + sidePath);
     request(options, function (error, response, content) {
+        adapter.log.debug("requested " + sidePath);
         if (!error && response.statusCode == 200) {
             let $ = cheerio.load(content);
             
@@ -337,7 +358,11 @@ function getIsgValues(sidePath) {
             adapter.log.error("statusCode: " + response.statusCode);
             adapter.log.error("statusText: " + response.statusText);
         }
+
+        resolvePromise();
     });
+
+    return promise;
 }
 
 function createISGCommands (strGroup,valTag,valTagLang,valType,valUnit,valRole,valValue,valStates,valMin,valMax) {
@@ -616,34 +641,52 @@ function main() {
         host = "http://" + host;
     }
     adapter.subscribeStates('*')
-    
-    statusPaths.forEach(function(item){
-        getIsgStatus(item);
-    })
 
-    valuePaths.forEach(function(item){
-        getIsgValues(item);
-    })
+    updateIsg()
+        .then(() => queueCommand(
+                updateCommands,
+                adapter.config.isgCommandIntervall),
+            id => isgCommandIntervall = id
+        );
 
-    commandPaths.forEach(function(item){
-        getIsgCommands(item);
-    })
+    updateCommands()
+        .then(() => queueCommand(
+                updateIsg,
+                adapter.config.isgIntervall),
+            id => isgIntervall = id
+        );
+}
 
-    isgIntervall = setInterval(function(){
-            valuePaths.forEach(function(item){
-                getIsgValues(item);
-            }), statusPaths.forEach(function(item){
-                getIsgStatus(item);
-            })
-        }, (adapter.config.isgIntervall * 1000));
+function queueCommand(command, timeout, nextId) {
+	timeout *= 1000;
+	const start = Date.now();
 
-    
+	const id = setTimeout(async function () {
+		await command();
 
-    isgCommandIntervall = setInterval(function(){
-            commandPaths.forEach(function(item){
-                getIsgCommands(item);
-            })
-        }, (adapter.config.isgCommandIntervall * 1000));
+		let waitTime = timeout - (Date.now() - start);
+		if(waitTime < 1)
+			waitTime = 1;
+
+		queueCommand(command, waitTime, nextId);
+	}, timeout);
+	nextId(id);
+}
+
+async function updateIsg(){
+	for (const item of statusPaths) {
+		await getIsgStatus(item);
+	}
+
+	for (const item of valuePaths) {
+		await getIsgValues(item);
+	}
+}
+
+async function updateCommands(){
+	for (const item of commandPaths) {
+		await getIsgCommands(item);
+	}
 }
 
 function rebootISG(){
