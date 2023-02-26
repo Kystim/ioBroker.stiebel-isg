@@ -182,9 +182,10 @@ function getHTML(sidePath) {
 	};
 
 	return new Promise(function (resolve, reject) {
+		const start = Date.now();
 		adapter.log.info("requesting " + sidePath);
 		request(options, function (error, response, content) {
-			adapter.log.info("requested " + sidePath);
+			adapter.log.info("requested " + sidePath +" in "+ (Date.now() - start) + "ms");
 			if (!error && response.statusCode == 200) {
 				resolve(cheerio.load(content));
 			} else if (error) {
@@ -679,6 +680,8 @@ function setIsgCommands(strKey, strValue) {
 	clearTimeout(CommandTimeout);
 	CommandTimeout = setTimeout(function(){
 		request(postOptions, function (error, response, _content) {
+			const start = Date.now();
+			adapter.log.info("posted in "+ (Date.now() - start) + "ms");
 			if (!error && response.statusCode == 200) {
 				commandPaths.forEach(function(item){
 					getIsgCommands(item);
@@ -717,6 +720,12 @@ function main() {
 		adapter.subscribeStates("ISGReboot")
 	);
 
+	adapter.log.silly("Testlog: silly");
+	adapter.log.debug("Testlog: debug");
+	adapter.log.info("Testlog: info");
+	adapter.log.warn("Testlog: warn");
+	adapter.log.error("Testlog: error");
+
 	host = adapter.config.isgAddress;
 	if(host.search(/http/i) == -1){
 		host = "http://" + host;
@@ -742,12 +751,15 @@ function queueCommand(command, timeout, nextId) {
 	timeout *= 1000;
 	const start = Date.now();
 
+	adapter.log.info("Queueing command for " + timeout + " ms");
 	const id = setTimeout(async function () {
 		await command();
 
 		let waitTime = timeout - (Date.now() - start);
 		if(waitTime < 1)
 			waitTime = 1;
+
+		adapter.log.info("Processed command in " + (Date.now() - start) + " ms");
 
 		queueCommand(command, waitTime, nextId);
 	}, timeout);
