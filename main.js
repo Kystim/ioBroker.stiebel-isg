@@ -679,13 +679,10 @@ function setIsgCommands(strKey, strValue) {
 	//send all settings to device after waitingtime of 5 Seconds. If more commands are sent.
 	clearTimeout(CommandTimeout);
 	CommandTimeout = setTimeout(function(){
+		const start = Date.now();
 		request(postOptions, function (error, response, _content) {
-			const start = Date.now();
 			adapter.log.info("posted in "+ (Date.now() - start) + "ms");
 			if (!error && response.statusCode == 200) {
-				commandPaths.forEach(function(item){
-					getIsgCommands(item);
-				});
 			} else if (error) {
 				adapter.log.error("Error: " + error);
 			} else if (response.statusCode !== 200) {
