@@ -12,6 +12,7 @@ let systemLanguage;
 let nameTranslation;
 let isgIntervall;
 let isgCommandIntervall;
+let shutDown = false;
 let commands = [];
 let CommandTimeout;
 let jar;
@@ -74,6 +75,7 @@ function startAdapter(options) {
 		},
 		unload: function (callback) {
 			try {
+				shutDown = true;
 				if (isgIntervall) clearTimeout(isgIntervall);
 				if (isgCommandIntervall) clearTimeout(isgCommandIntervall);
 				adapter.log.info("cleaned everything up...");
@@ -653,8 +655,10 @@ async function getIsgCommands(sidePath) {
 
 function setIsgCommands(strKey, strValue) {
 	const newCommand =
-        {"name": strKey,
-        	"value": strValue};
+		{
+			name: strKey,
+			value: strValue
+		};
 
 	commands.push(newCommand);
 
@@ -723,52 +727,79 @@ function main() {
 	}
 	adapter.subscribeStates("*");
 
-	updateIsg()
-		.then(() => queueCommand(
-			updateCommands,
-			adapter.config.isgCommandIntervall *1000,
-			id => isgCommandIntervall = id
-		));
+	queueCommand(
+		updateCommands,
+		adapter.config.isgCommandIntervall * 1000,
+		id => isgCommandIntervall = id
+	);
 
-	updateCommands()
-		.then(() => queueCommand(
-			updateIsg,
-			adapter.config.isgIntervall *1000,
-			id => isgIntervall = id
-		));
+	queueCommand(
+		updateIsg,
+		adapter.config.isgIntervall * 1000,
+		id => isgIntervall = id
+	);
 }
 
-function queueCommand(command, timeout, nextId) {
+async function queueCommand(command, plannedDuration, nextId) {
 	const start = Date.now();
 
-	adapter.log.info("Queueing command for " + timeout + " ms");
-	const id = setTimeout(async function () {
+	try {
 		await command();
+	}catch (e) {
+	}
 
-		let waitTime = timeout - (Date.now() - start);
-		if(waitTime < 1)
-			waitTime = 1;
+	const processingTime = Date.now() - start;
+	adapter.log.info("Processed command in " + processingTime + " ms");
 
-		adapter.log.info("Processed command in " + (Date.now() - start) + " ms");
+	let waitTime = plannedDuration - processingTime;
+	if (waitTime < 1)
+		waitTime = 1;
 
-		queueCommand(command, waitTime, nextId);
-	}, timeout);
+	if(shutDown)
+		return;
+
+	adapter.log.info("Queueing command for " + waitTime + " ms");
+	const id = setTimeout(async function () {
+		await queueCommand(command, plannedDuration, nextId);
+	}, waitTime);
+
 	nextId(id);
 }
 
 async function updateIsg(){
 	for (const item of statusPaths) {
-		await getIsgStatus(item);
+		if(shutDown)
+			return;
+
+		try {
+			await getIsgStatus(item);
+		}catch (e) {
+			await getIsgStatus(item);
+		}
 	}
 
 	for (const item of valuePaths) {
-		await getIsgValues(item);
+		if(shutDown)
+			return;
+
+		try {
+			await getIsgValues(item);
+		}catch (e) {
+			await getIsgValues(item);
+		}
 	}
 }
 
 async function updateCommands(){
 	for (const item of commandPaths) {
-		await getIsgCommands(item);
+		if(shutDown)
+			return;
+
+		try {
+			await getIsgCommands(item);
+		}catch (e) {
+			await getIsgCommands(item);
+		}
 	}
 }
 
